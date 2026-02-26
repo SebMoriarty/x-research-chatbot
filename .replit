@@ -1,0 +1,15 @@
+run = "bun run server.ts"
+language = "typescript"
+
+[nix]
+channel = "stable-24_05"
+
+[nix.packages]
+bun = "bun"
+
+[deployment]
+run = ["sh", "-c", "bun run server.ts"]
+
+[[ports]]
+localPort = 3456
+externalPort = 80
