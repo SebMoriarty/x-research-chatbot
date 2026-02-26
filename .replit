@@ -3,9 +3,7 @@ language = "typescript"
 
 [nix]
 channel = "stable-24_05"
-
-[nix.packages]
-bun = "bun"
+packages = ["bun"]
 
 [deployment]
 run = ["sh", "-c", "bun run server.ts"]
