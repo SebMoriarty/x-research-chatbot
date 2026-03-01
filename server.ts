@@ -1,11 +1,11 @@
 /**
- * X Research Chatbot — Bun HTTP server.
- * Serves the chat UI and /api/chat endpoint.
+ * Noel — X Research Chatbot for Netrunner Tax.
+ * Bun HTTP server. Thin entry point — routes in routes.ts.
  */
 
 import { readFileSync } from "fs";
 import { join, resolve } from "path";
-import { chat, type ChatMessage } from "./agent";
+import { matchRoute } from "./routes";
 
 const PORT = 3456;
 const PUBLIC_DIR = join(import.meta.dir, "public");
@@ -30,51 +30,21 @@ try {
 
 const server = Bun.serve({
   port: PORT,
-  async fetch(req) {
+  async fetch(req, server) {
     const url = new URL(req.url);
+    const ip = server.requestIP(req)?.address || "unknown";
 
-    // API endpoint
-    if (url.pathname === "/api/chat" && req.method === "POST") {
-      let body: any;
-      try {
-        body = await req.json();
-      } catch {
-        return Response.json({ error: "Invalid JSON" }, { status: 400 });
-      }
-
-      try {
-        const messages: ChatMessage[] = body.messages || [];
-
-        if (!Array.isArray(body.messages) || messages.length === 0) {
-          return Response.json({ error: "No messages provided" }, { status: 400 });
-        }
-
-        // Validate message shape
-        for (const msg of messages) {
-          if (!msg.role || !msg.content || typeof msg.content !== "string") {
-            return Response.json({ error: "Invalid message format" }, { status: 400 });
-          }
-          if (msg.role !== "user" && msg.role !== "assistant") {
-            return Response.json({ error: "Invalid message role" }, { status: 400 });
-          }
-        }
-
-        const response = await chat(messages);
-        return Response.json({ response });
-      } catch (err: any) {
-        console.error("Chat error:", err);
-        return Response.json(
-          { error: "Internal error" },
-          { status: 500 }
-        );
-      }
+    // API routes
+    const handler = matchRoute(url.pathname, req.method);
+    if (handler) {
+      return handler(req, ip);
     }
 
     // Serve static files
     let filePath = url.pathname === "/" ? "/index.html" : url.pathname;
     const fullPath = resolve(join(PUBLIC_DIR, filePath));
 
-    // Prevent path traversal — resolved path must stay inside PUBLIC_DIR
+    // Prevent path traversal
     if (!fullPath.startsWith(PUBLIC_DIR)) {
       return new Response("Forbidden", { status: 403 });
     }
@@ -90,4 +60,4 @@ const server = Bun.serve({
   },
 });
 
-console.log(`X Research Chatbot running at http://localhost:${PORT}`);
+console.log(`Noel (X Research Chatbot) running at http://localhost:${PORT}`);

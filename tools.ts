@@ -5,6 +5,8 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import * as api from "./lib/api";
+import * as cache from "./lib/cache";
+import { trackXCall } from "./usage";
 
 // Tool definitions for the Anthropic API
 export const toolDefinitions: Anthropic.Tool[] = [
@@ -148,16 +150,32 @@ export async function executeTool(
   try {
     switch (name) {
       case "x_search": {
+        // Check cache first
+        const cacheKey = `search:${input.query}:${input.max_results || 50}:${input.sort_order || "relevancy"}:${input.since || ""}`;
+        const cached = cache.get(input.query, cacheKey);
+        if (cached) {
+          return `Found ${cached.length} tweets (cached):\n\n${cached.map(formatTweet).join("\n---\n")}`;
+        }
+
+        trackXCall();
         const tweets = await api.search(input.query, {
           maxResults: input.max_results || 50,
           sortOrder: input.sort_order || "relevancy",
           since: input.since,
         });
+
+        // Cache results
+        if (tweets.length > 0) {
+          cache.set(input.query, cacheKey, tweets);
+        }
+
         if (tweets.length === 0) return "No tweets found for this query.";
         return `Found ${tweets.length} tweets:\n\n${tweets.map(formatTweet).join("\n---\n")}`;
       }
 
       case "x_user_profile": {
+        trackXCall();
+        trackXCall(); // Profile makes 2 API calls internally
         const { user, tweets } = await api.profile(input.username, {
           count: input.count || 20,
           includeReplies: input.include_replies || false,
@@ -173,25 +191,28 @@ export async function executeTool(
       }
 
       case "x_get_tweet": {
+        trackXCall();
         const tweet = await api.getTweet(input.tweet_id);
         if (!tweet) return "Tweet not found.";
         return formatTweet(tweet);
       }
 
       case "x_thread": {
+        trackXCall();
         const tweets = await api.thread(input.tweet_id);
         if (tweets.length === 0) return "No thread found for this tweet ID.";
         return `Thread (${tweets.length} tweets):\n\n${tweets.map(formatTweet).join("\n---\n")}`;
       }
 
       case "x_engagement_analysis": {
+        trackXCall();
         let tweets = await api.search(input.query, {
           maxResults: input.max_results || 100,
           sortOrder: "relevancy",
           since: input.since,
         });
         tweets = api.dedupe(tweets);
-        if (input.min_likes || input.min_impressions) {
+        if (input.min_likes !== undefined || input.min_impressions !== undefined) {
           tweets = api.filterEngagement(tweets, {
             minLikes: input.min_likes,
             minImpressions: input.min_impressions,
