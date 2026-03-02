@@ -1,0 +1,87 @@
+header {
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--cream-08);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--cream-05);
+  flex-shrink: 0;
+}
+
+header h1 {
+  font-family: var(--font-title);
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--cream);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+header .badge {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--cream-12);
+  color: var(--cream-60);
+  padding: 3px 10px;
+  border-radius: 10px;
+  letter-spacing: 0.03em;
+}
+
+.header-spacer { flex: 1; }
+
+/* Usage bar */
+.usage-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.usage-bar .track {
+  width: 80px;
+  height: 4px;
+  background: var(--cream-08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.usage-bar .fill {
+  height: 100%;
+  background: var(--cream-40);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.usage-bar .fill.warning { background: var(--warning); }
+.usage-bar .fill.critical { background: var(--error); }
+
+.usage-bar .label {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--cream-20);
+  white-space: nowrap;
+}
+
+/* Icon buttons (export, etc.) */
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1px solid var(--cream-08);
+  background: transparent;
+  color: var(--cream-40);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-icon:hover {
+  background: var(--cream-05);
+  border-color: var(--cream-12);
+  color: var(--cream-60);
+}
+
+.btn-icon svg { width: 16px; height: 16px; }

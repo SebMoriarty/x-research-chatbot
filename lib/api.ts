@@ -252,11 +252,9 @@ export async function thread(
   try {
     const rootUrl = `${BASE}/tweets/${conversationId}?${FIELDS}`;
     const raw = await apiGet(rootUrl);
-    const rootTweets = parseTweets({ ...raw, data: raw.data ? [raw.data] : (raw as any).id ? [raw] : [] });
-    // Fix: single tweet lookup returns tweet at top level
-    if ((raw as any).id) {
-      // raw is the tweet itself — need to re-fetch with proper structure
-    }
+    // Single tweet lookup returns { data: {...} } — wrap in array for parseTweets
+    const tweetData = raw.data && !Array.isArray(raw.data) ? [raw.data] : raw.data || [];
+    const rootTweets = parseTweets({ ...raw, data: tweetData });
     if (rootTweets.length > 0) {
       tweets.unshift(...rootTweets);
     }
@@ -329,8 +327,8 @@ export function filterEngagement(
   opts: { minLikes?: number; minImpressions?: number }
 ): Tweet[] {
   return tweets.filter((t) => {
-    if (opts.minLikes && t.metrics.likes < opts.minLikes) return false;
-    if (opts.minImpressions && t.metrics.impressions < opts.minImpressions)
+    if (opts.minLikes !== undefined && t.metrics.likes < opts.minLikes) return false;
+    if (opts.minImpressions !== undefined && t.metrics.impressions < opts.minImpressions)
       return false;
     return true;
   });
