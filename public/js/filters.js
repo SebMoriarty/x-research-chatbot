@@ -69,19 +69,16 @@ export function initFilters() {
     btn.setAttribute("role", "radio");
     btn.setAttribute("aria-checked", t === get().timeRange ? "true" : "false");
     btn.dataset.time = t;
-
-    if (t === get().timeRange) {
-      btn.setAttribute("aria-pressed", "true");
-    }
+    btn.tabIndex = t === get().timeRange ? 0 : -1;
 
     btn.addEventListener("click", () => {
       // Deselect all
       timeRange.querySelectorAll("button").forEach((b) => {
-        b.setAttribute("aria-pressed", "false");
         b.setAttribute("aria-checked", "false");
+        b.tabIndex = -1;
       });
-      btn.setAttribute("aria-pressed", "true");
       btn.setAttribute("aria-checked", "true");
+      btn.tabIndex = 0;
       set({ timeRange: t });
       updateActiveTags();
     });

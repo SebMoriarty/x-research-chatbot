@@ -7,21 +7,32 @@ import { get, set, subscribe } from "./state.js";
 const chatContainer = document.getElementById("chat-container");
 const typing = document.getElementById("typing");
 const welcome = document.getElementById("welcome");
+const liveRegion = document.getElementById("live-region");
 
 // Use marked.js for markdown (loaded via CDN in index.html)
 function renderMarkdown(text) {
   if (typeof marked !== "undefined") {
-    // Configure marked for security
     marked.setOptions({
       breaks: true,
       gfm: true,
     });
-    // Sanitize: escape HTML in source before parsing
-    const escaped = text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-    return marked.parse(escaped);
+
+    // Create a custom renderer that sanitizes output HTML
+    // instead of pre-escaping input (which breaks blockquotes, entities, etc.)
+    const renderer = new marked.Renderer();
+    const originalLink = renderer.link.bind(renderer);
+    renderer.link = function (href, title, linkText) {
+      // Ensure all links open in new tab with noopener
+      const html = originalLink(href, title, linkText);
+      return html
+        .replace("<a ", '<a target="_blank" rel="noopener noreferrer" ')
+        .replace(/javascript:/gi, "");
+    };
+
+    // Strip raw HTML tags from source to prevent XSS,
+    // but preserve markdown syntax characters (>, &, etc.)
+    const sanitized = text.replace(/<\/?(?:script|iframe|object|embed|form|input|button|style|link|meta|base)[^>]*>/gi, "");
+    return marked.parse(sanitized, { renderer });
   }
 
   // Fallback: basic regex markdown if marked isn't loaded
@@ -76,6 +87,17 @@ export function addMessage(role, content) {
 
   chatContainer.insertBefore(div, typing);
   chatContainer.scrollTop = chatContainer.scrollHeight;
+
+  // Announce to screen readers
+  if (liveRegion) {
+    const announcement =
+      role === "error"
+        ? content
+        : role === "user"
+          ? `You said: ${content}`
+          : "Noel responded";
+    liveRegion.textContent = announcement;
+  }
 }
 
 export function showTyping() {
