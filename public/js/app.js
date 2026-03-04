@@ -8,6 +8,7 @@ import { initFilters } from "./filters.js";
 import { initUsage, refreshUsage } from "./usage.js";
 import { initDigest } from "./digest.js";
 import { initExport } from "./export.js";
+import { initSavedSearches } from "./savedSearches.js";
 
 // DOM refs
 const input = document.getElementById("input");
@@ -18,6 +19,16 @@ initFilters();
 initUsage();
 initDigest();
 initExport();
+initSavedSearches();
+
+// Deep Dive toggle
+const deepDiveBtn = document.getElementById("deep-dive-btn");
+deepDiveBtn.addEventListener("click", () => {
+  const current = get().deepDive;
+  set({ deepDive: !current });
+  deepDiveBtn.setAttribute("aria-pressed", String(!current));
+  deepDiveBtn.setAttribute("aria-label", `Deep Dive mode: ${!current ? "on" : "off"}`);
+});
 
 // Auto-resize textarea
 input.addEventListener("input", () => {
@@ -57,7 +68,8 @@ async function send() {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 35_000);
+    const timeoutMs = state.deepDive ? 50_000 : 35_000;
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     const res = await fetch("/api/chat", {
       method: "POST",
@@ -66,6 +78,7 @@ async function send() {
         messages,
         filters: state.filters,
         timeRange: state.timeRange,
+        deepDive: state.deepDive,
       }),
       signal: controller.signal,
     });
@@ -77,8 +90,13 @@ async function send() {
       addMessage("error", `Error: ${data.error}`);
     } else {
       addMessage("assistant", data.response);
+      // Strip HTML comment metadata before storing for clean export
+      const cleanResponse = data.response
+        .replace(/<!--suggestions:\[.*?\]-->/s, "")
+        .replace(/<!--chart:\{.*?\}-->/gs, "")
+        .trimEnd();
       set({
-        messages: [...get().messages, { role: "assistant", content: data.response }],
+        messages: [...get().messages, { role: "assistant", content: cleanResponse }],
       });
     }
   } catch (err) {
@@ -95,6 +113,12 @@ async function send() {
     input.focus();
   }
 }
+
+// Suggestion chip click → auto-send
+document.addEventListener("suggestion-click", (e) => {
+  input.value = e.detail.text;
+  send();
+});
 
 // Focus input on load
 input.focus();

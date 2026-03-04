@@ -37,7 +37,13 @@ Guidelines:
 - Format your analysis with clear sections and bullet points
 - Include specific tweet URLs when referencing notable tweets
 - When discussing metrics, put numbers in context (e.g., "high engagement for this niche")
-- If the user has active search filters, incorporate them into every tool call`;
+- If the user has active search filters, incorporate them into every tool call
+- After every response, append exactly this on its own line:
+  <!--suggestions:["suggestion1","suggestion2","suggestion3"]-->
+  Generate exactly 3 short (<60 chars) actionable follow-ups specific to this response.
+- When presenting engagement metrics for 3+ items, include a chart on its own line:
+  <!--chart:{"type":"bar","labels":["label1","label2"],"data":[100,50],"title":"Chart Title"}-->
+  type: "bar", "line", or "pie". Max 10 items. One chart per response. Only when it adds value.`;
 
 const DIGEST_SYSTEM_PROMPT = `You are Noel, running a morning brief digest for the Netrunner Tax marketing team. You will be given preset search categories. Call the x_search tool for each one, then provide a combined executive summary.
 
@@ -61,6 +67,15 @@ Structure your response as:
 
 Be concise but thorough. Include tweet URLs for anything notable.`;
 
+const DEEP_DIVE_ADDENDUM = `
+
+DEEP DIVE MODE — provide comprehensive analysis with these 5 sections:
+1. **Key Excerpts**: Quote the most relevant tweet text verbatim (2-4 excerpts)
+2. **Engagement Delta**: Compare current engagement to the account's baseline or previous similar posts (e.g., "3x above average likes")
+3. **Suggested Reply Copy**: Draft 1-2 ready-to-post reply options the Netrunner team could use
+4. **Risk Flags**: Note any negative sentiment, misinformation, PR risks, or competitor attacks
+5. **Opportunity Flags**: Highlight partnership openings, viral potential, unmet needs, or influencer engagement windows`;
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
@@ -69,6 +84,8 @@ export interface ChatMessage {
 interface ChatOptions {
   filters?: FilterName[];
   timeRange?: string;
+  deepDive?: boolean;
+  signal?: AbortSignal;
 }
 
 export async function chat(
@@ -77,10 +94,13 @@ export async function chat(
 ): Promise<string> {
   const anthropic = getClient();
 
-  // Build system prompt with filter context
+  // Build system prompt with filter context and deep dive
   let systemPrompt = SYSTEM_PROMPT;
   if (opts.filters?.length || opts.timeRange) {
     systemPrompt += buildFilterContext(opts.filters || [], opts.timeRange);
+  }
+  if (opts.deepDive) {
+    systemPrompt += DEEP_DIVE_ADDENDUM;
   }
 
   // Convert to Anthropic message format
@@ -93,14 +113,15 @@ export async function chat(
 
   while (iterations < MAX_ITERATIONS) {
     iterations++;
+    opts.signal?.throwIfAborted();
 
     const response = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: 4096,
+      max_tokens: opts.deepDive ? 8192 : 4096,
       system: systemPrompt,
       tools: toolDefinitions,
       messages: apiMessages,
-    });
+    }, { signal: opts.signal });
 
     // Track token usage
     if (response.usage) {
@@ -123,19 +144,18 @@ export async function chat(
     // Add the assistant's response (with tool_use blocks) to messages
     apiMessages.push({ role: "assistant", content: response.content });
 
-    // Execute all tool calls and collect results
-    const toolResults: Anthropic.ToolResultBlockParam[] = [];
-    for (const toolUse of toolUseBlocks) {
-      const result = await executeTool(
-        toolUse.name,
-        toolUse.input as Record<string, any>
-      );
-      toolResults.push({
-        type: "tool_result",
-        tool_use_id: toolUse.id,
-        content: result,
-      });
-    }
+    // Execute all tool calls in parallel and collect results
+    opts.signal?.throwIfAborted();
+    const toolResults: Anthropic.ToolResultBlockParam[] = await Promise.all(
+      toolUseBlocks.map(async (toolUse) => {
+        try {
+          const content = await executeTool(toolUse.name, toolUse.input as Record<string, any>);
+          return { type: "tool_result" as const, tool_use_id: toolUse.id, content };
+        } catch (err: any) {
+          return { type: "tool_result" as const, tool_use_id: toolUse.id, content: `Tool error: ${err.message}`, is_error: true };
+        }
+      })
+    );
 
     // Add tool results as user message
     apiMessages.push({ role: "user", content: toolResults });
@@ -148,7 +168,7 @@ export async function chat(
  * Digest mode — runs preset queries and returns combined analysis.
  * Single agent call with multiple tool invocations.
  */
-export async function digest(timeRange: string = "24h"): Promise<string> {
+export async function digest(timeRange: string = "24h", signal?: AbortSignal): Promise<string> {
   const anthropic = getClient();
 
   const querySummary = DIGEST_QUERIES.map(
@@ -165,6 +185,7 @@ export async function digest(timeRange: string = "24h"): Promise<string> {
 
   while (iterations < DIGEST_MAX_ITERATIONS) {
     iterations++;
+    signal?.throwIfAborted();
 
     const response = await anthropic.messages.create({
       model: MODEL,
@@ -172,7 +193,7 @@ export async function digest(timeRange: string = "24h"): Promise<string> {
       system: DIGEST_SYSTEM_PROMPT,
       tools: toolDefinitions,
       messages: apiMessages,
-    });
+    }, { signal });
 
     // Track token usage
     if (response.usage) {
@@ -193,18 +214,17 @@ export async function digest(timeRange: string = "24h"): Promise<string> {
 
     apiMessages.push({ role: "assistant", content: response.content });
 
-    const toolResults: Anthropic.ToolResultBlockParam[] = [];
-    for (const toolUse of toolUseBlocks) {
-      const result = await executeTool(
-        toolUse.name,
-        toolUse.input as Record<string, any>
-      );
-      toolResults.push({
-        type: "tool_result",
-        tool_use_id: toolUse.id,
-        content: result,
-      });
-    }
+    signal?.throwIfAborted();
+    const toolResults: Anthropic.ToolResultBlockParam[] = await Promise.all(
+      toolUseBlocks.map(async (toolUse) => {
+        try {
+          const content = await executeTool(toolUse.name, toolUse.input as Record<string, any>);
+          return { type: "tool_result" as const, tool_use_id: toolUse.id, content };
+        } catch (err: any) {
+          return { type: "tool_result" as const, tool_use_id: toolUse.id, content: `Tool error: ${err.message}`, is_error: true };
+        }
+      })
+    );
 
     apiMessages.push({ role: "user", content: toolResults });
   }

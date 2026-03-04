@@ -52,8 +52,8 @@ export function buildFilterContext(filters: FilterName[], timeRange?: string): s
  * Preset queries for digest/morning brief mode.
  */
 export const DIGEST_QUERIES = [
-  { label: "Brand Mentions", query: '"netrunner" OR "@NetrunnerTax" OR "netrunner tax" -is:retweet', since: "24h" },
-  { label: "Competitor Activity", query: "(koinly OR cointracker OR tokentax OR coinledger OR zenledger) -is:retweet", since: "24h" },
-  { label: "Crypto Tax News", query: '"crypto tax" (regulation OR IRS OR reporting OR news) -is:retweet lang:en', since: "24h" },
-  { label: "Opportunities", query: '("looking for crypto tax" OR "need crypto tax" OR "best crypto tax tool") -is:retweet', since: "24h" },
+  { label: "Brand Mentions", query: '"netrunner" OR "@NetrunnerTax" OR "netrunner tax" -is:retweet' },
+  { label: "Competitor Activity", query: "(koinly OR cointracker OR tokentax OR coinledger OR zenledger) -is:retweet" },
+  { label: "Crypto Tax News", query: '"crypto tax" (regulation OR IRS OR reporting OR news) -is:retweet lang:en' },
+  { label: "Opportunities", query: '("looking for crypto tax" OR "need crypto tax" OR "best crypto tax tool") -is:retweet' },
 ];

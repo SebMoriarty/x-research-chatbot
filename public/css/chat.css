@@ -31,7 +31,7 @@
 .message.assistant {
   align-self: flex-start;
   background: var(--cream-05);
-  color: var(--cream-60);
+  color: var(--cream-80);
   border: 1px solid var(--cream-08);
   border-bottom-left-radius: 4px;
 }
@@ -39,7 +39,7 @@
 .message.digest {
   align-self: flex-start;
   background: var(--cream-05);
-  color: var(--cream-60);
+  color: var(--cream-80);
   border: 1px solid var(--cream-08);
   border-left: 3px solid var(--cream-20);
   border-bottom-left-radius: 4px;
@@ -203,6 +203,10 @@
   border-color: var(--cream-12);
   color: var(--cream-80);
 }
+.welcome .examples button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--cream-40);
+}
 
 /* Scrollbar */
 #chat-container::-webkit-scrollbar { width: 6px; }
@@ -212,3 +216,54 @@
   border-radius: 3px;
 }
 #chat-container::-webkit-scrollbar-thumb:hover { background: var(--cream-20); }
+
+/* Suggestion chips */
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 80%;
+  align-self: flex-start;
+}
+
+.suggestion-chip {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 400;
+  padding: 5px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--cream-12);
+  background: transparent;
+  color: var(--cream-40);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.suggestion-chip:hover {
+  background: var(--cream-05);
+  border-color: var(--cream-20);
+  color: var(--cream-60);
+}
+
+.suggestion-chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--cream-40);
+}
+
+/* Inline charts */
+.chart-container {
+  width: 100%;
+  max-height: 200px;
+  margin: 10px 0;
+}
+
+.chart-container canvas {
+  max-height: 200px;
+}
+
+@media (max-width: 640px) {
+  #chat-container { padding: 16px; }
+  .message { max-width: 90%; }
+  .welcome { max-width: 100%; }
+  .suggestions { max-width: 90%; }
+}

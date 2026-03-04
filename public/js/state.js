@@ -10,6 +10,7 @@ const state = {
   activeRequests: 0,
   usage: null,
   digestLoading: false,
+  deepDive: false,
 };
 
 const listeners = new Set();

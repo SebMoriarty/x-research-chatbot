@@ -84,4 +84,20 @@ header .badge {
   color: var(--cream-60);
 }
 
+.btn-icon:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--cream-40);
+}
+
 .btn-icon svg { width: 16px; height: 16px; }
+
+.btn-icon[aria-pressed="true"] {
+  background: var(--cream-12);
+  border-color: var(--cream-40);
+  color: var(--cream);
+}
+
+@media (max-width: 640px) {
+  header { padding: 12px 16px; }
+  .usage-bar .track { width: 56px; }
+}
