@@ -121,7 +121,7 @@ export function initFilters() {
   });
 }
 
-function updateActiveTags() {
+export function updateActiveTags() {
   const container = document.getElementById("active-filters");
   if (!container) return;
 

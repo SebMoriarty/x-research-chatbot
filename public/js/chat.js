@@ -71,14 +71,124 @@ function renderMarkdown(text) {
   return html;
 }
 
+/**
+ * Extract <!--suggestions:[...]--\> from text.
+ * Returns { cleaned, suggestions: string[] }.
+ */
+function extractSuggestions(text) {
+  const match = text.match(/<!--suggestions:(\[.*?\])-->/s);
+  if (!match) return { cleaned: text, suggestions: [] };
+  try {
+    const suggestions = JSON.parse(match[1]);
+    if (!Array.isArray(suggestions)) return { cleaned: text, suggestions: [] };
+    const cleaned = text.replace(match[0], "").trimEnd();
+    return { cleaned, suggestions: suggestions.map(String).slice(0, 3) };
+  } catch {
+    return { cleaned: text, suggestions: [] };
+  }
+}
+
+/**
+ * Extract <!--chart:{...}--\> from text.
+ * Returns { cleaned, charts: [{ id, payload }] }.
+ */
+function extractCharts(text) {
+  const charts = [];
+  const cleaned = text.replace(/<!--chart:(\{.*?\})-->/gs, (full, json) => {
+    try {
+      const payload = JSON.parse(json);
+      if (!payload.type || !payload.labels || !payload.data) return full;
+      if (!["bar", "line", "pie"].includes(payload.type)) return full;
+      const id = "chart-" + Math.random().toString(36).slice(2, 9);
+      charts.push({ id, payload });
+      return `<div class="chart-container" id="${id}"><canvas></canvas></div>`;
+    } catch {
+      return full;
+    }
+  });
+  return { cleaned, charts };
+}
+
+/**
+ * Initialize a Chart.js chart with cream-on-black theme.
+ */
+const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function initChart(canvasEl, config) {
+  if (typeof Chart === "undefined") return;
+  const cream40 = "rgba(243,238,217,0.4)";
+  const cream08 = "rgba(243,238,217,0.08)";
+  const cream20 = "rgba(243,238,217,0.2)";
+  const cream60 = "rgba(243,238,217,0.6)";
+
+  const isPie = config.type === "pie";
+  const colors = [
+    cream60,
+    cream40,
+    cream20,
+    "rgba(243,238,217,0.5)",
+    "rgba(243,238,217,0.3)",
+    "rgba(243,238,217,0.15)",
+    "rgba(243,238,217,0.65)",
+    "rgba(243,238,217,0.35)",
+    "rgba(243,238,217,0.25)",
+    "rgba(243,238,217,0.1)",
+  ];
+
+  new Chart(canvasEl, {
+    type: config.type,
+    data: {
+      labels: config.labels.slice(0, 10),
+      datasets: [{
+        data: config.data.slice(0, 10),
+        backgroundColor: isPie ? colors.slice(0, config.data.length) : cream20,
+        borderColor: isPie ? cream08 : cream60,
+        borderWidth: isPie ? 1 : 2,
+        fill: !isPie,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: prefersReducedMotion ? { duration: 0 } : undefined,
+      plugins: {
+        legend: { display: isPie, labels: { color: cream40, font: { size: 11 } } },
+        title: config.title
+          ? { display: true, text: config.title, color: cream60, font: { size: 13 } }
+          : { display: false },
+      },
+      scales: isPie ? {} : {
+        x: { ticks: { color: cream40, font: { size: 11 } }, grid: { color: cream08 } },
+        y: { ticks: { color: cream40, font: { size: 11 } }, grid: { color: cream08 } },
+      },
+    },
+  });
+}
+
 export function addMessage(role, content) {
   if (welcome) welcome.style.display = "none";
+
+  // Remove previous suggestion chips so they don't stack up
+  const oldSuggestions = chatContainer.querySelectorAll(".suggestions");
+  for (const el of oldSuggestions) el.remove();
 
   const div = document.createElement("div");
   div.className = `message ${role}`;
 
+  let suggestions = [];
+  let charts = [];
+
   if (role === "assistant" || role === "digest") {
-    div.innerHTML = renderMarkdown(content);
+    // Extract structured data from HTML comments
+    const sugResult = extractSuggestions(content);
+    suggestions = sugResult.suggestions;
+    let cleaned = sugResult.cleaned;
+
+    const chartResult = extractCharts(cleaned);
+    charts = chartResult.charts;
+    cleaned = chartResult.cleaned;
+
+    div.innerHTML = renderMarkdown(cleaned);
   } else if (role === "error") {
     div.textContent = content;
   } else {
@@ -86,6 +196,45 @@ export function addMessage(role, content) {
   }
 
   chatContainer.insertBefore(div, typing);
+
+  // Initialize charts after DOM insertion
+  for (const chart of charts) {
+    const container = document.getElementById(chart.id);
+    if (container) {
+      const canvas = container.querySelector("canvas");
+      if (canvas) {
+        // Accessible label for screen readers (canvas is opaque to AT)
+        const label = chart.payload.title
+          ? `${chart.payload.title} — ${chart.payload.type} chart with ${chart.payload.labels.length} items`
+          : `${chart.payload.type} chart with ${chart.payload.labels.length} items`;
+        canvas.setAttribute("role", "img");
+        canvas.setAttribute("aria-label", label);
+        initChart(canvas, chart.payload);
+      }
+    }
+  }
+
+  // Render suggestion chips
+  if (suggestions.length > 0) {
+    const sugDiv = document.createElement("div");
+    sugDiv.className = "suggestions";
+    sugDiv.setAttribute("role", "group");
+    sugDiv.setAttribute("aria-label", "Follow-up suggestions");
+    for (const text of suggestions) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "suggestion-chip";
+      btn.textContent = text;
+      btn.addEventListener("click", () => {
+        document.dispatchEvent(
+          new CustomEvent("suggestion-click", { bubbles: true, detail: { text } })
+        );
+      });
+      sugDiv.appendChild(btn);
+    }
+    chatContainer.insertBefore(sugDiv, typing);
+  }
+
   chatContainer.scrollTop = chatContainer.scrollHeight;
 
   // Announce to screen readers
