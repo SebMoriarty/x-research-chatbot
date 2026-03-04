@@ -9,9 +9,9 @@ import { join } from "path";
 const DATA_DIR = join(import.meta.dir, "data");
 const USAGE_FILE = join(DATA_DIR, "usage.json");
 
-// Configurable caps — override via env
-const MAX_DAILY_TOKENS = parseInt(process.env.MAX_DAILY_TOKENS || "50000");
-const MAX_DAILY_X_CALLS = parseInt(process.env.MAX_DAILY_X_CALLS || "200");
+// Configurable caps — override via env (NaN falls back to default)
+const MAX_DAILY_TOKENS = parseInt(process.env.MAX_DAILY_TOKENS || "50000") || 50000;
+const MAX_DAILY_X_CALLS = parseInt(process.env.MAX_DAILY_X_CALLS || "200") || 200;
 
 interface UsageData {
   date: string;
