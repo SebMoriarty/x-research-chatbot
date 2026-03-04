@@ -8,6 +8,10 @@ import { checkRateLimit } from "./ratelimit";
 import { getUsage, checkBudget } from "./usage";
 import { isValidFilter, isValidTimeRange, type FilterName } from "./filters";
 
+const MAX_BODY_SIZE = 512 * 1024; // 512 KB
+const MAX_MESSAGES = 50;
+const MAX_MESSAGE_LENGTH = 10_000; // chars per message
+
 type Handler = (req: Request, ip: string) => Promise<Response>;
 
 const routes: Record<string, Record<string, Handler>> = {
@@ -42,6 +46,12 @@ async function handleChat(req: Request, ip: string): Promise<Response> {
     return Response.json({ error: "Daily usage limit reached. Try again tomorrow." }, { status: 429 });
   }
 
+  // Body size guard
+  const contentLength = parseInt(req.headers.get("content-length") || "0");
+  if (contentLength > MAX_BODY_SIZE) {
+    return Response.json({ error: "Request too large" }, { status: 413 });
+  }
+
   let body: any;
   try {
     body = await req.json();
@@ -55,6 +65,10 @@ async function handleChat(req: Request, ip: string): Promise<Response> {
     return Response.json({ error: "No messages provided" }, { status: 400 });
   }
 
+  if (messages.length > MAX_MESSAGES) {
+    return Response.json({ error: `Too many messages (max ${MAX_MESSAGES})` }, { status: 400 });
+  }
+
   // Validate message shape
   for (const msg of messages) {
     if (!msg.role || !msg.content || typeof msg.content !== "string") {
@@ -62,6 +76,9 @@ async function handleChat(req: Request, ip: string): Promise<Response> {
     }
     if (msg.role !== "user" && msg.role !== "assistant") {
       return Response.json({ error: "Invalid message role" }, { status: 400 });
+    }
+    if (msg.content.length > MAX_MESSAGE_LENGTH) {
+      return Response.json({ error: `Message too long (max ${MAX_MESSAGE_LENGTH} chars)` }, { status: 400 });
     }
   }
 
@@ -81,24 +98,26 @@ async function handleChat(req: Request, ip: string): Promise<Response> {
     timeRange = body.timeRange;
   }
 
-  // Execute with timeout
+  // Deep dive mode
+  const deepDive = body.deepDive === true;
+
+  // Execute with timeout — deep dive gets 45s, normal chat 30s
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30_000);
+    const timeoutMs = deepDive ? 45_000 : 30_000;
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-    const response = await Promise.race([
-      chat(messages, { filters, timeRange }),
-      new Promise<never>((_, reject) => {
-        controller.signal.addEventListener("abort", () =>
-          reject(new Error("Request timeout"))
-        );
-      }),
-    ]);
+    const response = await chat(messages, {
+      filters,
+      timeRange,
+      deepDive,
+      signal: controller.signal,
+    });
 
     clearTimeout(timeout);
     return Response.json({ response });
   } catch (err: any) {
-    if (err.message === "Request timeout") {
+    if (err.name === "AbortError" || err.message === "Request timeout") {
       return Response.json({ error: "Request timed out — try a simpler query" }, { status: 504 });
     }
     console.error("Chat error:", err);
@@ -136,19 +155,12 @@ async function handleDigest(req: Request, ip: string): Promise<Response> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 60_000); // Digest gets 60s
 
-    const response = await Promise.race([
-      digest(timeRange),
-      new Promise<never>((_, reject) => {
-        controller.signal.addEventListener("abort", () =>
-          reject(new Error("Request timeout"))
-        );
-      }),
-    ]);
+    const response = await digest(timeRange, controller.signal);
 
     clearTimeout(timeout);
     return Response.json({ response });
   } catch (err: any) {
-    if (err.message === "Request timeout") {
+    if (err.name === "AbortError" || err.message === "Request timeout") {
       return Response.json({ error: "Digest timed out — X API may be slow" }, { status: 504 });
     }
     console.error("Digest error:", err);
